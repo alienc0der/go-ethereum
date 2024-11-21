@@ -1,5 +1,7 @@
 ## Go Ethereum
 
+This repository is a fork of [crypto-org-chain/go-ethereum](https://github.com/crypto-org-chain/go-ethereum), specifically focusing on the `release/v1.11.x` branch for Bitcoin account abstraction.
+
 Official Golang execution layer implementation of the Ethereum protocol.
 
 [![API Reference](

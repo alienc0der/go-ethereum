@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/btc"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -48,10 +50,11 @@ type PrecompiledContract interface {
 // PrecompiledContractsHomestead contains the default set of pre-compiled Ethereum
 // contracts used in the Frontier and Homestead releases.
 var PrecompiledContractsHomestead = map[common.Address]PrecompiledContract{
-	ecrecover{}.Address():     &ecrecover{},
-	sha256hash{}.Address():    &sha256hash{},
-	ripemd160hash{}.Address(): &ripemd160hash{},
-	dataCopy{}.Address():      &dataCopy{},
+	ecrecover{}.Address():              &ecrecover{},
+	sha256hash{}.Address():             &sha256hash{},
+	ripemd160hash{}.Address():          &ripemd160hash{},
+	dataCopy{}.Address():               &dataCopy{},
+	verifyBitcoinSignature{}.Address(): &verifyBitcoinSignature{},
 }
 
 // PrecompiledContractsByzantium contains the default set of pre-compiled Ethereum
@@ -65,6 +68,7 @@ var PrecompiledContractsByzantium = map[common.Address]PrecompiledContract{
 	bn256AddByzantium{}.Address():       &bn256AddByzantium{},
 	bn256ScalarMulByzantium{}.Address(): &bn256ScalarMulByzantium{},
 	bn256PairingByzantium{}.Address():   &bn256PairingByzantium{},
+	verifyBitcoinSignature{}.Address():  &verifyBitcoinSignature{},
 }
 
 // PrecompiledContractsIstanbul contains the default set of pre-compiled Ethereum
@@ -79,6 +83,7 @@ var PrecompiledContractsIstanbul = map[common.Address]PrecompiledContract{
 	bn256ScalarMulIstanbul{}.Address(): &bn256ScalarMulIstanbul{},
 	bn256PairingIstanbul{}.Address():   &bn256PairingIstanbul{},
 	blake2F{}.Address():                &blake2F{},
+	verifyBitcoinSignature{}.Address(): &verifyBitcoinSignature{},
 }
 
 // PrecompiledContractsBerlin contains the default set of pre-compiled Ethereum
@@ -93,6 +98,7 @@ var PrecompiledContractsBerlin = map[common.Address]PrecompiledContract{
 	bn256ScalarMulIstanbul{}.Address(): &bn256ScalarMulIstanbul{},
 	bn256PairingIstanbul{}.Address():   &bn256PairingIstanbul{},
 	blake2F{}.Address():                &blake2F{},
+	verifyBitcoinSignature{}.Address(): &verifyBitcoinSignature{},
 }
 
 // PrecompiledContractsBLS contains the set of pre-compiled Ethereum
@@ -1315,4 +1321,40 @@ func (c *bls12381MapG2) Run(evm *EVM, contract *Contract, readonly bool) ([]byte
 
 	// Encode the G2 point to 256 bytes
 	return g.EncodePoint(r), nil
+}
+
+// personal test
+type verifyBitcoinSignature struct{}
+
+// Address defines the precompiled contract address. This MUST match the address
+// set in the precompiled contract map.
+func (verifyBitcoinSignature) Address() common.Address {
+	return common.BytesToAddress([]byte{255})
+}
+
+func (c *verifyBitcoinSignature) RequiredGas(input []byte) uint64 {
+	return params.VerifyBTCSignaturesGas
+}
+
+func (c *verifyBitcoinSignature) Run(evm *EVM, contract *Contract, readonly bool) ([]byte, error) {
+	// Define the ABI arguments corresponding to the Solidity function
+	args := abi.Arguments{
+		{Type: abi.Type{T: abi.BytesTy}},  // bytes for bitcoinAddress
+		{Type: abi.Type{T: abi.BytesTy}},  // bytes for signature
+		{Type: abi.Type{T: abi.StringTy}}, // string for message
+	}
+	// Decode the input
+	unpacked, err := args.Unpack(contract.Input)
+	if err != nil {
+		return []byte{0}, err
+	}
+	// Extract individual values
+	bitcoinAddress := unpacked[0].([]byte)
+	signature := unpacked[1].([]byte)
+	message := unpacked[2].(string)
+	isValid, err := btc.VerifyBitcoinSignature(string(bitcoinAddress), signature, message)
+	if err != nil || !isValid {
+		return []byte{0}, nil
+	}
+	return []byte{1}, nil
 }
